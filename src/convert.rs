@@ -86,6 +86,8 @@ impl<'a> TryFrom<Projection<'a>> for Expr {
     fn try_from(p: Projection<'a>) -> Result<Self, Self::Error> {
         match p.0 {
             SelectItem::UnnamedExpr(SqlExpr::Identifier(id)) => Ok(col(&id.to_string())),
+            SelectItem::QualifiedWildcard(v) => Ok(col(&v.to_string())),
+            SelectItem::Wildcard => Ok(col("*")),
             SelectItem::ExprWithAlias {
                 expr: SqlExpr::Identifier(id),
                 alias,
@@ -93,9 +95,8 @@ impl<'a> TryFrom<Projection<'a>> for Expr {
                 Box::new(Expr::Column(Arc::from(id.to_string()))),
                 Arc::from(alias.to_string()),
             )),
-            SelectItem::QualifiedWildcard(v) => Ok(col(&v.to_string())),
-            SelectItem::Wildcard => Ok(col("*")),
             SelectItem::UnnamedExpr(SqlExpr::Function(f)) => match f.name.to_string().as_str() {
+                // "sum" => Ok(Expr::Agg(AggExpr::Sum(Box::new(f)))),
                 "count" => Ok(col(&f.args[0].to_string()).count()),
                 "sum" => Ok(col(&f.args[0].to_string()).sum()),
                 "max" => Ok(col(&f.args[0].to_string()).max()),
@@ -141,7 +142,6 @@ impl<'a> TryFrom<Order<'a>> for (String, bool) {
                 ))
             }
         };
-
         Ok((name, !o.0.asc.unwrap_or(true)))
     }
 }
@@ -215,9 +215,6 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                 let mut selection = Vec::with_capacity(8);
                 for p in projection {
                     let expr = Projection(p).try_into()?;
-                    // if expr in selection {
-                    //     return Err(anyhow!("Duplicate column {}", expr));
-                    // }
                     selection.push(expr);
                 }
 

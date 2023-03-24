@@ -1,5 +1,5 @@
-use queryer::query;
 use std::env;
+use xq::query;
 
 #[tokio::main]
 async fn main() {

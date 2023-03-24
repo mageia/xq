@@ -58,7 +58,7 @@ pub async fn query<T: AsRef<str>>(sql: T) -> Result<DataSet> {
         group_by,
     } = sql.try_into()?;
 
-    println!("selection: {:?}", selection);
+    // println!("selection: {:?}", selection);
     tracing::info!("retrieving data from source: {}", source);
 
     let ds = detect_content(retrieve_data(source).await?).load()?;

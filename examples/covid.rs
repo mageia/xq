@@ -1,5 +1,5 @@
 use anyhow::Result;
-use queryer::query;
+use xq::query;
 
 #[tokio::main]
 async fn main() -> Result<()> {
