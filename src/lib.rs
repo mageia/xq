@@ -5,8 +5,7 @@ mod loader;
 use std::ops::{Deref, DerefMut};
 
 use anyhow::{anyhow, Result};
-pub use dialect::TyrDialect;
-// use polars::prelude::Expr;
+pub use dialect::XQDialect;
 use polars::prelude::*;
 use sqlparser::parser::Parser;
 
@@ -41,7 +40,7 @@ impl DataSet {
 }
 
 pub async fn query<T: AsRef<str>>(sql: T) -> Result<DataSet> {
-    let ast = Parser::parse_sql(&TyrDialect::default(), sql.as_ref())?;
+    let ast = Parser::parse_sql(&XQDialect::default(), sql.as_ref())?;
     if ast.len() != 1 {
         return Err(anyhow!("Only support single sql at the moment"));
     };
@@ -49,36 +48,47 @@ pub async fn query<T: AsRef<str>>(sql: T) -> Result<DataSet> {
     let sql = &ast[0];
 
     let Sql {
+        selection,
         source,
         condition,
-        selection,
+        group_by,
+        aggregation,
         offset,
         limit,
         order_by,
-        group_by,
     } = sql.try_into()?;
 
-    // println!("selection: {:?}", selection);
-    tracing::info!("retrieving data from source: {}", source);
+    tracing::debug!("retrieving data from source: {}", source);
 
     let ds = detect_content(retrieve_data(source).await?).load()?;
+
+    println!("group_by: {:?}", group_by.to_vec());
+    println!("selection: {:?}", selection);
 
     let mut filtered = match condition {
         Some(expr) => ds.0.lazy().filter(expr),
         None => ds.0.lazy(),
     };
 
-    println!("group_by: {:?}", group_by.to_vec());
+    println!("aggregation: {:?}", aggregation.to_vec());
 
-    filtered = order_by.into_iter().fold(filtered, |acc, (col, desc)| {
-        acc.sort(
-            &col,
-            SortOptions {
-                descending: desc,
-                nulls_last: true,
-            },
-        )
-    });
+    if !group_by.is_empty() {
+        filtered = filtered.groupby(group_by).agg(aggregation)
+        // .agg([col("new_deaths").sum().alias("sum")]);
+    }
+
+    filtered = order_by
+        .into_iter()
+        .fold(filtered, |acc, (col, desc)| -> LazyFrame {
+            acc.sort(
+                &col,
+                SortOptions {
+                    descending: desc,
+                    nulls_last: true,
+                    multithreaded: true,
+                },
+            )
+        });
 
     if offset.is_some() || limit.is_some() {
         filtered = filtered.slice(offset.unwrap_or(0), limit.unwrap_or(usize::MAX) as u64);

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Ok, Result};
-use polars::prelude::{col, Expr, LiteralValue, Operator};
+use polars::prelude::{col, AggExpr, Expr, LiteralValue, Operator};
 use sqlparser::ast::{
     BinaryOperator as SqlBinaryOperator, Expr as SqlExpr, Offset as SqlOffset, OrderByExpr, Select,
     SelectItem, SetExpr, Statement, TableFactor, TableWithJoins, Value as SqlValue,
@@ -9,9 +9,10 @@ use sqlparser::ast::{
 
 pub struct Sql<'a> {
     pub selection: Vec<Expr>,
-    pub group_by: Vec<Expr>,
-    pub condition: Option<Expr>,
     pub source: &'a str,
+    pub condition: Option<Expr>,
+    pub group_by: Vec<Expr>,
+    pub aggregation: Vec<Expr>,
     pub order_by: Vec<(String, bool)>,
     pub offset: Option<i64>,
     pub limit: Option<usize>,
@@ -37,8 +38,8 @@ impl TryFrom<Expression> for Expr {
                 op: Operation(op).try_into()?,
                 right: Box::new(Expression(right).try_into()?),
             }),
-            SqlExpr::IsNull(expr) => Ok(Self::IsNull(Box::new(Expression(expr).try_into()?))),
-            SqlExpr::IsNotNull(expr) => Ok(Self::IsNotNull(Box::new(Expression(expr).try_into()?))),
+            // SqlExpr::IsNull(expr) => Ok(Self::IsNull(Box::new(Expression(expr).try_into()?))),
+            // SqlExpr::IsNotNull(expr) => Ok(Self::IsNotNull(Box::new(Expression(expr).try_into()?))),
             SqlExpr::Identifier(id) => Ok(Self::Column(Arc::from(id.value))),
             SqlExpr::Value(v) => Ok(Self::Literal(Value(v).try_into()?)),
             v => Err(anyhow!("expr {:#?} is not supported", v)),
@@ -84,10 +85,12 @@ impl<'a> TryFrom<Projection<'a>> for Expr {
     type Error = anyhow::Error;
 
     fn try_from(p: Projection<'a>) -> Result<Self, Self::Error> {
+        // println!("{:#?}", p.0);
+
         match p.0 {
             SelectItem::UnnamedExpr(SqlExpr::Identifier(id)) => Ok(col(&id.to_string())),
-            SelectItem::QualifiedWildcard(v) => Ok(col(&v.to_string())),
-            SelectItem::Wildcard => Ok(col("*")),
+            SelectItem::QualifiedWildcard(v, _) => Ok(col(&v.to_string())),
+            SelectItem::Wildcard(_) => Ok(col("*")),
             SelectItem::ExprWithAlias {
                 expr: SqlExpr::Identifier(id),
                 alias,
@@ -96,12 +99,11 @@ impl<'a> TryFrom<Projection<'a>> for Expr {
                 Arc::from(alias.to_string()),
             )),
             SelectItem::UnnamedExpr(SqlExpr::Function(f)) => match f.name.to_string().as_str() {
-                // "sum" => Ok(Expr::Agg(AggExpr::Sum(Box::new(f)))),
                 "count" => Ok(col(&f.args[0].to_string()).count()),
                 "sum" => Ok(col(&f.args[0].to_string()).sum()),
-                "max" => Ok(col(&f.args[0].to_string()).max()),
-                "min" => Ok(col(&f.args[0].to_string()).min()),
-                "mean" | "avg" => Ok(col(&f.args[0].to_string()).mean()),
+                // "max" => Ok(col(&f.args[0].to_string()).max()),
+                // "min" => Ok(col(&f.args[0].to_string()).min()),
+                // "mean" | "avg" => Ok(col(&f.args[0].to_string()).mean()),
                 unknown => Err(anyhow!("function {} not support yet", unknown)),
             },
             item => Err(anyhow!("Projection {} not supported", item)),
@@ -196,7 +198,7 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                     projection,
                     group_by: group_by_clause,
                     ..
-                } = match &q.body {
+                } = match &q.body.as_ref() {
                     SetExpr::Select(statement) => statement.as_ref(),
                     _ => return Err(anyhow!("We only support Select Query at the moment")),
                 };
@@ -213,9 +215,48 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                 }
 
                 let mut selection = Vec::with_capacity(8);
+                let mut aggregation = Vec::with_capacity(8);
+
                 for p in projection {
                     let expr = Projection(p).try_into()?;
-                    selection.push(expr);
+                    match &expr {
+                        Expr::Alias(x, y) => {
+                            selection.push(x.clone().alias(&y));
+                        }
+                        Expr::Column(_) => {
+                            selection.push(expr);
+                        }
+                        Expr::Agg(AggExpr::Sum(sum)) => {
+                            match sum.as_ref() {
+                                Expr::Column(c) => {
+                                    let alias = format!("sum_{}", c);
+                                    aggregation.push(sum.clone().sum().alias(&alias));
+                                    selection.push(col(&alias));
+                                }
+                                //TODO: Alias
+                                // Expr::Alias(x, y) => {
+                                //     println!("Sum alias: {:?} {:?}", x, y);
+                                // }
+                                _ => {
+                                    return Err(anyhow!(
+                                        "We only support Column for sum, got {}",
+                                        sum
+                                    ))
+                                }
+                            }
+                        }
+                        //TODO: Count
+                        // Expr::Agg(AggExpr::Count(_)) => {
+                        //     aggregation.push(col("*").count().alias("count1"));
+                        //     selection.push(col("count1"));
+                        // }
+                        _ => {
+                            return Err(anyhow!(
+                                "We only support Alias and Column for projection, got {}",
+                                expr
+                            ))
+                        }
+                    }
                 }
 
                 let mut order_by = Vec::new();
@@ -228,9 +269,10 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
 
                 Ok(Sql {
                     selection,
-                    condition,
                     source,
+                    condition,
                     group_by,
+                    aggregation,
                     order_by,
                     offset,
                     limit,
@@ -246,7 +288,7 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
 
 mod tests {
     use super::*;
-    use crate::TyrDialect;
+    use crate::XQDialect;
     use sqlparser::parser::Parser;
 
     #[test]
@@ -256,7 +298,7 @@ mod tests {
             "select a, b, c from {} where a = 1 group by c order by c desc limit 5 offset 10",
             url
         );
-        let statement = &Parser::parse_sql(&TyrDialect::default(), sql.as_ref()).unwrap()[0];
+        let statement = &Parser::parse_sql(&XQDialect::default(), sql.as_ref()).unwrap()[0];
         let sql: Sql = statement.try_into().unwrap();
 
         assert_eq!(sql.source, url);

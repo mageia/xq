@@ -1,18 +1,18 @@
 [package]
 name = "xq"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.57"
-async-trait = "0.1.56"
-tracing = "0.1.35"
-reqwest = "0.11.11"
-sqlparser = "0.18.0"
-tokio = { version = "1.19.2", features = ["full"] }
-polars = { version = "0.22.8", features = ["lazy", "bigidx"] }
+anyhow = "1.0.70"
+async-trait = "0.1.67"
+tracing = "0.1.37"
+reqwest = "0.11.15"
+sqlparser = "0.32.0"
+tokio = { version = "1.26.0", features = ["full"] }
+polars = { version = "0.27.2", features = ["lazy", "bigidx"] }
 
 [dev-dependencies]
-tracing-subscriber = "0.3.11"
+tracing-subscriber = "0.3.16"

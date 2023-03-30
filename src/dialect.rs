@@ -1,9 +1,9 @@
 use sqlparser::dialect::Dialect;
 
 #[derive(Debug, Default)]
-pub struct TyrDialect;
+pub struct XQDialect;
 
-impl Dialect for TyrDialect {
+impl Dialect for XQDialect {
     fn is_identifier_start(&self, ch: char) -> bool {
         ('a'..='z').contains(&ch) || ('A'..='Z').contains(&ch) || ch == '_'
     }
@@ -34,6 +34,6 @@ mod tests {
 
     #[test]
     fn it_works() {
-        assert!(Parser::parse_sql(&TyrDialect::default(), &example_sql()).is_ok())
+        assert!(Parser::parse_sql(&XQDialect::default(), &example_sql()).is_ok())
     }
 }

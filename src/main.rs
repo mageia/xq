@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, ops::Deref};
 use xq::query;
 
 #[tokio::main]
@@ -20,7 +20,7 @@ async fn main() {
     // }
 
     match query(sql).await {
-        Ok(df) => println!("{:#?}", df),
+        Ok(df) => println!("{:#?}", df.deref()),
         Err(e) => println!("{:#?}", e),
     }
 }
