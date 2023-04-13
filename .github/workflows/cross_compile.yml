@@ -4,23 +4,28 @@ name: Cross-compile
 
 jobs:
   build:
-    name: Build
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        target:
-          - aarch64-apple-darwin
-          - x86_64-apple-darwin
-          - x86_64-unknown-linux-gnu
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v2
+
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: ${{ matrix.target }}
           override: true
+
       - uses: actions-rs/cargo@v1
         with:
-          use-cross: true
           command: build
+          use-cross: true
           args: --release --target=${{ matrix.target }}
