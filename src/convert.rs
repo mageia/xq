@@ -221,7 +221,7 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                     let expr = Projection(p).try_into()?;
                     match &expr {
                         Expr::Alias(x, y) => {
-                            selection.push(x.clone().alias(&y));
+                            selection.push(x.clone().alias(y));
                         }
                         Expr::Column(_) => {
                             selection.push(expr);
