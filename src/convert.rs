@@ -201,7 +201,7 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                     ..
                 } = match &q.body.as_ref() {
                     SetExpr::Select(statement) => statement.as_ref(),
-                    _ => return Err(anyhow!("We only support Select Query at the moment")),
+                    _ => return Err(anyhow!("Only support `Select` Query now")),
                 };
 
                 let source = Source(table_with_joins).try_into()?;
@@ -222,6 +222,13 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                     let expr = Projection(p).try_into()?;
                     match &expr {
                         Expr::Alias(x, y) => selection.push(x.clone().alias(y)),
+                        Expr::Wildcard => selection.push(expr),
+
+                        // FIXME:
+                        // Expr::Count => {
+                        //     aggregation.push(count().alias("count"));
+                        //     selection.push(col("count"));
+                        // }
                         Expr::Column(_) => selection.push(expr),
                         Expr::Agg(AggExpr::Sum(sum)) => match sum.as_ref() {
                             Expr::Column(c) => {
@@ -243,13 +250,14 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                             }
                             _ => return Err(anyhow!("Unknown Column for count, got {}", x)),
                         },
+
                         _ => return Err(anyhow!("Unsupport projection type: {}", expr)),
                     }
                 }
 
                 let mut order_by = Vec::new();
                 for expr in orders {
-                    order_by.push(Order(expr).try_into()?);
+                    order_by.push(Order(expr).try_into()?)
                 }
 
                 let offset = offset.map(|v| Offset(v).into());
@@ -273,7 +281,6 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
 }
 
 #[cfg(test)]
-
 mod tests {
     use super::*;
     use crate::XQDialect;
