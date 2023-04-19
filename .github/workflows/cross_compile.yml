@@ -1,9 +1,10 @@
 on: [push, pull_request]
 
-name: Cross-compile
+name: Cross Compile
 
 jobs:
   build:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -14,16 +15,17 @@ jobs:
             os: macos-latest
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-    runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v2
 
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.target }}
+          profile: minimal
           override: true
+          target: ${{ matrix.target }}
 
       - uses: actions-rs/cargo@v1
         with:

@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Ok, Result};
-use polars::prelude::{col, AggExpr, Expr, LiteralValue, Operator};
+use polars::lazy::dsl::AggExpr;
+use polars::prelude::{col, count, Expr, LiteralValue, Operator};
 use sqlparser::ast::{
     BinaryOperator as SqlBinaryOperator, Expr as SqlExpr, Offset as SqlOffset, OrderByExpr, Select,
     SelectItem, SetExpr, Statement, TableFactor, TableWithJoins, Value as SqlValue,
@@ -220,36 +221,28 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                 for p in projection {
                     let expr = Projection(p).try_into()?;
                     match &expr {
-                        Expr::Alias(x, y) => {
-                            selection.push(x.clone().alias(y));
-                        }
-                        Expr::Column(_) => {
-                            selection.push(expr);
-                        }
-                        Expr::Agg(AggExpr::Sum(sum)) => {
-                            match sum.as_ref() {
-                                Expr::Column(c) => {
-                                    let alias = format!("sum_{}", c);
-                                    aggregation.push(sum.clone().sum().alias(&alias));
-                                    selection.push(col(&alias));
-                                }
-                                //TODO: Alias
-                                // Expr::Alias(x, y) => {
-                                //     println!("Sum alias: {:?} {:?}", x, y);
-                                // }
-                                _ => {
-                                    return Err(anyhow!(
-                                        "We only support Column for sum, got {}",
-                                        sum
-                                    ))
-                                }
+                        Expr::Alias(x, y) => selection.push(x.clone().alias(y)),
+                        Expr::Column(_) => selection.push(expr),
+                        Expr::Agg(AggExpr::Sum(sum)) => match sum.as_ref() {
+                            Expr::Column(c) => {
+                                let alias = format!("sum_{}", c);
+                                aggregation.push(sum.clone().sum().alias(&alias));
+                                selection.push(col(&alias));
                             }
-                        }
-                        //TODO: Count
-                        // Expr::Agg(AggExpr::Count(_)) => {
-                        //     aggregation.push(col("*").count().alias("count1"));
-                        //     selection.push(col("count1"));
-                        // }
+                            _ => return Err(anyhow!("Unknown Column for sum, got {}", sum)),
+                        },
+                        Expr::Agg(AggExpr::Count(x)) => match x.as_ref() {
+                            Expr::Column(c) => {
+                                let alias = format!("count_{}", c);
+                                aggregation.push(col(c).count().alias(&alias));
+                                selection.push(col(&alias));
+                            }
+                            Expr::Wildcard => {
+                                aggregation.push(count().alias("count"));
+                                selection.push(col("count"));
+                            }
+                            _ => return Err(anyhow!("Unknown Column for count, got {}", x)),
+                        },
                         _ => return Err(anyhow!("Unsupport projection type: {}", expr)),
                     }
                 }
