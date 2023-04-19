@@ -250,12 +250,7 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                         //     aggregation.push(col("*").count().alias("count1"));
                         //     selection.push(col("count1"));
                         // }
-                        _ => {
-                            return Err(anyhow!(
-                                "We only support Alias and Column for projection, got {}",
-                                expr
-                            ))
-                        }
+                        _ => return Err(anyhow!("Unsupport projection type: {}", expr)),
                     }
                 }
 

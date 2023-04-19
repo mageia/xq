@@ -62,15 +62,15 @@ pub async fn query<T: AsRef<str>>(sql: T) -> Result<DataSet> {
 
     let ds = detect_content(retrieve_data(source).await?).load()?;
 
-    println!("group_by: {:?}", group_by.to_vec());
-    println!("selection: {:?}", selection);
+    // println!("group_by: {:?}", group_by.to_vec());
+    // println!("selection: {:?}", selection);
 
     let mut filtered = match condition {
         Some(expr) => ds.0.lazy().filter(expr),
         None => ds.0.lazy(),
     };
 
-    println!("aggregation: {:?}", aggregation.to_vec());
+    // println!("aggregation: {:?}", aggregation.to_vec());
 
     if !group_by.is_empty() {
         filtered = filtered.groupby(group_by).agg(aggregation)
@@ -80,6 +80,12 @@ pub async fn query<T: AsRef<str>>(sql: T) -> Result<DataSet> {
     filtered = order_by
         .into_iter()
         .fold(filtered, |acc, (col, desc)| -> LazyFrame {
+            // println!(
+            //     "sorting by {} {} {:?}",
+            //     col,
+            //     desc,
+            //     acc.clone().select(selection.clone()).collect()
+            // );
             acc.sort(
                 &col,
                 SortOptions {
