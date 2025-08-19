@@ -34,6 +34,6 @@ mod tests {
 
     #[test]
     fn it_works() {
-        assert!(Parser::parse_sql(&XQDialect::default(), &example_sql()).is_ok())
+        assert!(Parser::parse_sql(&XQDialect, &example_sql()).is_ok())
     }
 }

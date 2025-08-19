@@ -35,8 +35,9 @@ impl Loader {
 pub fn detect_content(data: String) -> Loader {
     // Try to detect JSON by checking if it starts with { or [
     let trimmed = data.trim();
-    if (trimmed.starts_with('[') && trimmed.ends_with(']')) || 
-       (trimmed.starts_with('{') && trimmed.ends_with('}')) {
+    if (trimmed.starts_with('[') && trimmed.ends_with(']'))
+        || (trimmed.starts_with('{') && trimmed.ends_with('}'))
+    {
         Loader::Json(JsonLoader(data))
     } else {
         Loader::Csv(CsvLoader(data))

@@ -4,7 +4,7 @@ use xq::query;
 #[tokio::main]
 async fn main() -> Result<()> {
     println!("XQ Demo - SQL Query for Multiple Data Sources\n");
-    
+
     // Example 1: Query CSV file
     println!("Example 1: Query local CSV file");
     let csv_path = std::env::current_dir()?.join("examples/a.csv");
@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
         Err(e) => println!("Error: {}", e),
     }
     println!("\n---\n");
-    
+
     // Example 2: Query JSON file
     println!("Example 2: Query local JSON file");
     let json_path = std::env::current_dir()?.join("examples/data.json");
@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
         Err(e) => println!("Error: {}", e),
     }
     println!("\n---\n");
-    
+
     // Example 3: Query with WHERE and LIMIT
     println!("Example 3: Query with WHERE and LIMIT");
     let sql3 = format!(
@@ -45,11 +45,11 @@ async fn main() -> Result<()> {
         Err(e) => println!("Error: {}", e),
     }
     println!("\n---\n");
-    
+
     // Example 4: Query from HTTP (commented out to avoid external dependency)
     println!("Example 4: Query from HTTP (example only)");
     println!("SQL: SELECT location, total_cases FROM https://example.com/covid-data.csv WHERE total_cases > 1000000 ORDER BY total_cases DESC LIMIT 10");
     println!("(Skipped - requires actual HTTP endpoint)\n");
-    
+
     Ok(())
 }

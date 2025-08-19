@@ -28,11 +28,15 @@ fn print_help() {
 
 fn format_dataframe(df: &DataSet, format: &str) -> String {
     match format {
-        "json" => df.to_json().unwrap_or_else(|e| format!("Error formatting JSON: {}", e)),
+        "json" => df
+            .to_json()
+            .unwrap_or_else(|e| format!("Error formatting JSON: {}", e)),
         "csv" => {
             let mut df_clone = DataSet(df.0.clone());
-            df_clone.to_csv().unwrap_or_else(|e| format!("Error formatting CSV: {}", e))
-        },
+            df_clone
+                .to_csv()
+                .unwrap_or_else(|e| format!("Error formatting CSV: {}", e))
+        }
         _ => df.to_table().to_string(),
     }
 }
@@ -40,29 +44,29 @@ fn format_dataframe(df: &DataSet, format: &str) -> String {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    
+
     if args.len() < 2 {
         eprintln!("Error: No SQL query provided");
         println!();
         print_help();
         std::process::exit(1);
     }
-    
+
     let arg = &args[1];
     if arg == "--help" || arg == "-h" {
         print_help();
         return Ok(());
     }
-    
+
     let sql = arg;
-    
+
     // Parse format option
     let format = if args.len() > 2 && args[2] == "--format" && args.len() > 3 {
         &args[3]
     } else {
         "table"
     };
-    
+
     match query(sql).await {
         Ok(df) => {
             println!("{}", format_dataframe(&df, format));
@@ -72,6 +76,6 @@ async fn main() -> Result<()> {
             std::process::exit(1);
         }
     }
-    
+
     Ok(())
 }
