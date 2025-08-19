@@ -15,20 +15,24 @@ jobs:
             os: macos-latest
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@v1
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
-          override: true
-          target: ${{ matrix.target }}
+          targets: ${{ matrix.target }}
 
-      - uses: actions-rs/cargo@v1
+      - name: Build
+        run: cargo build --release --target=${{ matrix.target }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          command: build
-          use-cross: true
-          args: --release --target=${{ matrix.target }}
+          name: xq-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/xq${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+          if-no-files-found: error
