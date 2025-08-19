@@ -135,9 +135,13 @@ pub async fn query<T: AsRef<str>>(sql: T) -> Result<DataSet> {
 
     // println!("aggregation: {:?}", aggregation.to_vec());
 
-    if !group_by.is_empty() {
-        filtered = filtered.group_by(group_by).agg(aggregation)
-        // .agg([col("new_deaths").sum().alias("sum")]);
+    if !aggregation.is_empty() {
+        if !group_by.is_empty() {
+            filtered = filtered.group_by(group_by).agg(aggregation);
+        } else {
+            // When we have aggregation but no group by, aggregate the entire dataset
+            filtered = filtered.select(aggregation);
+        }
     }
 
     if !order_by.is_empty() {

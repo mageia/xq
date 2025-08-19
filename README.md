@@ -12,7 +12,7 @@ XQ是一个强大的命令行工具，允许你使用SQL语法从多种数据源
   - SELECT with column selection or *
   - WHERE条件过滤
   - GROUP BY分组
-  - 聚合函数: SUM, COUNT, MAX, MIN, AVG
+  - 聚合函数: SUM, COUNT (支持 COUNT(1), COUNT(*), COUNT(column)), MAX, MIN, AVG
   - ORDER BY排序（ASC/DESC）
   - LIMIT和OFFSET分页
 
