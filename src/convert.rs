@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Ok, Result};
 use polars::lazy::dsl::AggExpr;
-use polars::prelude::{col, count, Expr, LiteralValue, Operator};
+use polars::prelude::{col, len, Expr, LiteralValue, Operator};
 use sqlparser::ast::{
     BinaryOperator as SqlBinaryOperator, Expr as SqlExpr, Offset as SqlOffset, OrderByExpr, Select,
     SelectItem, SetExpr, Statement, TableFactor, TableWithJoins, Value as SqlValue,
@@ -35,9 +35,9 @@ impl TryFrom<Expression> for Expr {
     fn try_from(expr: Expression) -> Result<Self, Self::Error> {
         match *expr.0 {
             SqlExpr::BinaryOp { left, op, right } => Ok(Expr::BinaryExpr {
-                left: Box::new(Expression(left).try_into()?),
+                left: Arc::new(Expression(left).try_into()?),
                 op: Operation(op).try_into()?,
-                right: Box::new(Expression(right).try_into()?),
+                right: Arc::new(Expression(right).try_into()?),
             }),
             // SqlExpr::IsNull(expr) => Ok(Self::IsNull(Box::new(Expression(expr).try_into()?))),
             // SqlExpr::IsNotNull(expr) => Ok(Self::IsNotNull(Box::new(Expression(expr).try_into()?))),
@@ -96,15 +96,26 @@ impl<'a> TryFrom<Projection<'a>> for Expr {
                 expr: SqlExpr::Identifier(id),
                 alias,
             } => Ok(Expr::Alias(
-                Box::new(Expr::Column(Arc::from(id.to_string()))),
+                Arc::new(Expr::Column(Arc::from(id.to_string()))),
                 Arc::from(alias.to_string()),
             )),
-            SelectItem::UnnamedExpr(SqlExpr::Function(f)) => match f.name.to_string().as_str() {
+            SelectItem::ExprWithAlias {
+                expr: SqlExpr::Function(f),
+                alias,
+            } => match f.name.to_string().to_lowercase().as_str() {
+                "count" => Ok(col(&f.args[0].to_string()).count().alias(&alias.to_string())),
+                "sum" => Ok(col(&f.args[0].to_string()).sum().alias(&alias.to_string())),
+                "max" => Ok(col(&f.args[0].to_string()).max().alias(&alias.to_string())),
+                "min" => Ok(col(&f.args[0].to_string()).min().alias(&alias.to_string())),
+                "mean" | "avg" => Ok(col(&f.args[0].to_string()).mean().alias(&alias.to_string())),
+                unknown => Err(anyhow!("function {} not support yet", unknown)),
+            },
+            SelectItem::UnnamedExpr(SqlExpr::Function(f)) => match f.name.to_string().to_lowercase().as_str() {
                 "count" => Ok(col(&f.args[0].to_string()).count()),
                 "sum" => Ok(col(&f.args[0].to_string()).sum()),
-                // "max" => Ok(col(&f.args[0].to_string()).max()),
-                // "min" => Ok(col(&f.args[0].to_string()).min()),
-                // "mean" | "avg" => Ok(col(&f.args[0].to_string()).mean()),
+                "max" => Ok(col(&f.args[0].to_string()).max()),
+                "min" => Ok(col(&f.args[0].to_string()).min()),
+                "mean" | "avg" => Ok(col(&f.args[0].to_string()).mean()),
                 unknown => Err(anyhow!("function {} not support yet", unknown)),
             },
             item => Err(anyhow!("Projection {} not supported", item)),
@@ -177,8 +188,8 @@ impl TryFrom<Value> for LiteralValue {
             SqlValue::Number(v, _) => Ok(LiteralValue::Float64(v.parse().unwrap())),
             SqlValue::Boolean(v) => Ok(LiteralValue::Boolean(v)),
             SqlValue::Null => Ok(LiteralValue::Null),
-            SqlValue::SingleQuotedString(v) => Ok(LiteralValue::Utf8(v)),
-            SqlValue::DoubleQuotedString(v) => Ok(LiteralValue::Utf8(v)),
+            SqlValue::SingleQuotedString(v) => Ok(LiteralValue::String(v)),
+            SqlValue::DoubleQuotedString(v) => Ok(LiteralValue::String(v)),
             v => Err(anyhow!("Value {} is not support", v)),
         }
     }
@@ -221,7 +232,7 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                 for p in projection {
                     let expr = Projection(p).try_into()?;
                     match &expr {
-                        Expr::Alias(x, y) => selection.push(x.clone().alias(y)),
+                        Expr::Alias(x, y) => selection.push(x.as_ref().clone().alias(y)),
                         Expr::Wildcard => selection.push(expr),
 
                         // FIXME:
@@ -233,22 +244,46 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                         Expr::Agg(AggExpr::Sum(sum)) => match sum.as_ref() {
                             Expr::Column(c) => {
                                 let alias = format!("sum_{}", c);
-                                aggregation.push(sum.clone().sum().alias(&alias));
+                                aggregation.push(col(&c).sum().alias(&alias));
                                 selection.push(col(&alias));
                             }
                             _ => return Err(anyhow!("Unknown Column for sum, got {}", sum)),
                         },
-                        Expr::Agg(AggExpr::Count(x)) => match x.as_ref() {
+                        Expr::Agg(AggExpr::Count(x, _)) => match x.as_ref() {
                             Expr::Column(c) => {
                                 let alias = format!("count_{}", c);
-                                aggregation.push(col(c).count().alias(&alias));
+                                aggregation.push(col(&c).count().alias(&alias));
                                 selection.push(col(&alias));
                             }
                             Expr::Wildcard => {
-                                aggregation.push(count().alias("count"));
+                                aggregation.push(len().alias("count"));
                                 selection.push(col("count"));
                             }
                             _ => return Err(anyhow!("Unknown Column for count, got {}", x)),
+                        },
+                        Expr::Agg(AggExpr::Max { input: x, .. }) => match x.as_ref() {
+                            Expr::Column(c) => {
+                                let alias = format!("max_{}", c);
+                                aggregation.push(col(&c).max().alias(&alias));
+                                selection.push(col(&alias));
+                            }
+                            _ => return Err(anyhow!("Unknown Column for max, got {}", x)),
+                        },
+                        Expr::Agg(AggExpr::Min { input: x, .. }) => match x.as_ref() {
+                            Expr::Column(c) => {
+                                let alias = format!("min_{}", c);
+                                aggregation.push(col(&c).min().alias(&alias));
+                                selection.push(col(&alias));
+                            }
+                            _ => return Err(anyhow!("Unknown Column for min, got {}", x)),
+                        },
+                        Expr::Agg(AggExpr::Mean(x)) => match x.as_ref() {
+                            Expr::Column(c) => {
+                                let alias = format!("avg_{}", c);
+                                aggregation.push(col(&c).mean().alias(&alias));
+                                selection.push(col(&alias));
+                            }
+                            _ => return Err(anyhow!("Unknown Column for mean/avg, got {}", x)),
                         },
 
                         _ => return Err(anyhow!("Unsupport projection type: {}", expr)),
