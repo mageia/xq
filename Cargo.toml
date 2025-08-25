@@ -12,7 +12,7 @@ async-trait = "0.1.81"
 tracing = "0.1.40"
 sqlparser = "0.33.0"
 tokio = { version = "1.39.2", features = ["full"] }
-polars = { version = "0.41", features = ["lazy", "json", "csv"] }
+polars = { version = "0.50", features = ["lazy", "json", "csv"] }
 prettytable-rs = "0.10.0"
 serde_json = "1.0"
 [dev-dependencies]
